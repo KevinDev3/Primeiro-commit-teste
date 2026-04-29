@@ -200,14 +200,20 @@ export default function WorldCraftUI({ session }: { session?: any }) {
 
   const recentActivity = useMemo(() => { return [...filteredCharacters].sort((a,b) => -1).slice(0, 5); }, [filteredCharacters]);
 
- // CALCULO DO SCORE DA FICHA (Vercel Fix)
+ // CALCULO DO SCORE DA FICHA
   const calcCompletionScore = (char: ICharacter | undefined, bio: string): { score: number, missing: string[] } => {
-    let score = 0;
-    
-    // Forçando tipagem estrita para o Build do Next.js
-    const missing: Array<string> = [];
+    let score = 0; 
+    const missing: string[] = [];
     
     if (!char) return { score, missing };
+    
+    if (avatarUrl) score += 20; else missing.push("Capa Visual");
+    if (bio && bio.replace(/<[^>]*>/g, '').trim().length > 100) score += 30; else missing.push("Arquivos");
+    if (Object.keys(entityAttributes || {}).length > 0) score += 20; else missing.push("Ficha Técnica");
+    if ((entityTags || []).length > 0) score += 15; else missing.push("Etiquetas (Tags)");
+    if (relations.length > 0) score += 15; else missing.push("Vínculos Ativos");
+    
+    return { score, missing };
   };
   const { score: completionScore, missing: missingScoreItems } = calcCompletionScore(currentCharacterData, charBio);
 
