@@ -41,7 +41,7 @@ const getCategoryStyle = (key: string) => {
 export default function WorldCraftUI({ session }: { session?: any }) {
   const { 
     worlds, selectedWorld, setSelectedWorld, characters, selectedCharacter, setSelectedCharacter, currentCharacterData, loadCharacterData,
-    charBio, setCharBio, avatarUrl, handleAvatarUpload, isUploading, fileInputRef,
+    charBio, setCharBio, avatarUrl,setAvatarUrl, handleAvatarUpload, isUploading, fileInputRef,
     entityAttributes, setEntityAttributes, entityTags, setEntityTags, isPublic, setIsPublic, sortOrder, setSortOrder,
     handleSaveCharacterInfo, isSavingChar, wikiCounts, searchQuery, setSearchQuery,
     fetchRelations, createRelation, deleteRelation, handleDeleteWorld, handleDeleteEntity, fetchWorlds, duplicateEntity,
