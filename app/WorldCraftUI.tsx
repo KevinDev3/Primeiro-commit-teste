@@ -191,7 +191,9 @@ export default function WorldCraftUI({ session }: { session?: any }) {
 
   // CALCULO DO SCORE DA FICHA
   const calcCompletionScore = (char: ICharacter | undefined, bio: string): { score: number, missing: string[] } => {
-    let score = 0; const missing = [];
+    let score = 0; 
+    const missing: string[] = []; // <-- A CORREÇÃO ESTÁ AQUI (: string[])
+    
     if (!char) return { score, missing };
     if (avatarUrl) score += 20; else missing.push("Capa Visual");
     if (bio && bio.replace(/<[^>]*>/g, '').trim().length > 100) score += 30; else missing.push("Arquivos (mín. 100 caracteres)");
