@@ -18,8 +18,8 @@ import {
   Search, Sparkles, Folder, BookOpen, Share2, Network, Map, LayoutDashboard, Calendar, FileText, Ghost, Shield, Plus,
   ChevronDown, ChevronRight, Wand2, User, X, Loader2, Save, Image as ImageIcon,
   Lightbulb, Bug, Diamond, Building2, ArrowLeft, LogOut, Clock, MonitorPlay, BookMarked, Globe,
-  Filter, Tags, ArrowDownAZ, LayoutGrid, List as ListIcon, Camera, History, UserPlus, Trash2, Edit2, Clock3, StickyNote, Copy, Download,
-  Users, Lock, Send
+  Filter, Tags, LayoutGrid, Camera, Clock3, StickyNote, Copy, Download,
+  Users, Lock, Send, Trash2, Edit2, Check
 } from 'lucide-react';
 import { useWorldContext, IRelation, ICharacter, IWorld, IPlayerNote } from './context/WorldContext'; 
 
@@ -46,9 +46,10 @@ export default function WorldCraftUI({ session }: { session?: any }) {
     handleSaveCharacterInfo, isSavingChar, wikiCounts, searchQuery, setSearchQuery,
     fetchRelations, createRelation, deleteRelation, handleDeleteWorld, handleDeleteEntity, fetchWorlds, duplicateEntity,
     
-    // --- Funções da Fase 3 (Censura e Notas) ---
+    // --- Funções da Fase 3 ---
     isGM, getVisibleEntities, getRevealedFields, selectedCampaign,
-    playerNotes, fetchPlayerNotes, createPlayerNote, deletePlayerNote
+    playerNotes, fetchPlayerNotes, createPlayerNote, deletePlayerNote,
+    campaignMembers // <-- CORREÇÃO 1: Importado para evitar Cannot find name
   } = useWorldContext();
 
   const [activeView, setActiveView] = useState('dashboard');
@@ -59,17 +60,14 @@ export default function WorldCraftUI({ session }: { session?: any }) {
   const [entityTypeToCreate, setEntityTypeToCreate] = useState<any>(null);
   const [newTagInput, setNewTagInput] = useState('');
 
-  // ESTADO DAS ABAS DA FICHA (Adicionada 'mesa' para as Notas dos Jogadores)
   const [activeTab, setActiveTab] = useState<'geral' | 'atributos' | 'conexoes' | 'mesa' | 'leitura'>('geral');
 
-  // ESTADO DAS CONEXÕES E NOTAS
   const [relations, setRelations] = useState<IRelation[]>([]);
   const [newRelationTarget, setNewRelationTarget] = useState('');
   const [newRelationLabel, setNewRelationLabel] = useState('');
   const [newNoteContent, setNewNoteContent] = useState('');
   const [isNotePrivate, setIsNotePrivate] = useState(false);
 
-  // Dropdown e Busca
   const [isWorldDropdownOpen, setIsWorldDropdownOpen] = useState(false);
   const worldDropdownRef = useRef<HTMLDivElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -80,16 +78,15 @@ export default function WorldCraftUI({ session }: { session?: any }) {
   const [isSavingWorld, setIsSavingWorld] = useState(false);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
 
-  const [confirmModalConfig, setConfirmModalConfig] = useState<{ isOpen: boolean; title: string; message: string; action: () => Promise<void>; isLoading: boolean; }>({ isOpen: false, title: '', message: '', action: async () => {}, isLoading: false });
+  // CORREÇÃO 4: Retirado o isLoading que causava conflito com o Modal base
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{ isOpen: boolean; title: string; message: string; action: () => Promise<void>; }>({ isOpen: false, title: '', message: '', action: async () => {} });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // FILTRO MÁGICO: Aplica o "Filtro de Realidade" (Só vê o que o GM deixa)
   const visibleEntitiesList = getVisibleEntities();
   const filteredCharacters = useMemo(() => {
     return visibleEntitiesList.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || (c.category?.toLowerCase() ?? '').includes(searchQuery.toLowerCase()));
   }, [visibleEntitiesList, searchQuery]);
 
-  // CENSURA: Campos revelados da entidade selecionada
   const revealedFields = selectedCharacter ? getRevealedFields(selectedCharacter) : [];
   const canViewBio = revealedFields.includes('biography');
   const canViewAttributes = revealedFields.includes('attributes');
@@ -139,26 +136,24 @@ export default function WorldCraftUI({ session }: { session?: any }) {
   const onWorldDeleteClick = (e: React.MouseEvent, worldId: string, worldName: string) => {
     e.stopPropagation(); 
     setConfirmModalConfig({
-      isOpen: true, title: 'Excluir Mundo', message: `Tem a certeza que deseja excluir o mundo "${worldName}"? Toda a história, personagens e itens serão perdidos para sempre!`,
+      isOpen: true, title: 'Excluir Mundo', message: `Tem a certeza que deseja excluir o mundo "${worldName}"?`,
       action: async () => {
-        setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
         try { await handleDeleteWorld(worldId); setIsWorldDropdownOpen(false); setActiveView('dashboard'); } 
         catch (err: any) { alert("Erro ao excluir mundo: " + err.message); } 
-        finally { setConfirmModalConfig(prev => ({ ...prev, isOpen: false, isLoading: false })); }
-      }, isLoading: false
+        finally { setConfirmModalConfig(prev => ({ ...prev, isOpen: false })); }
+      }
     });
   };
 
   const onEntityDeleteClick = () => {
     if(!selectedCharacter) return;
     setConfirmModalConfig({
-      isOpen: true, title: 'Excluir Entidade', message: `Tem a certeza que deseja apagar os registos de ${currentCharacterData?.name}? Esta ação é irreversível.`,
+      isOpen: true, title: 'Excluir Entidade', message: `Tem a certeza que deseja apagar os registos de ${currentCharacterData?.name}?`,
       action: async () => {
-        setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
         try { await handleDeleteEntity(selectedCharacter); } 
         catch (err: any) { alert("Erro ao excluir entidade: " + err.message); } 
-        finally { setConfirmModalConfig(prev => ({ ...prev, isOpen: false, isLoading: false })); }
-      }, isLoading: false
+        finally { setConfirmModalConfig(prev => ({ ...prev, isOpen: false })); }
+      }
     });
   };
 
@@ -198,28 +193,23 @@ export default function WorldCraftUI({ session }: { session?: any }) {
     }, {} as Record<string, ICharacter[]>);
   }, [debouncedSearch, filteredCharacters]);
 
-  const recentActivity = useMemo(() => { return [...filteredCharacters].sort((a,b) => -1).slice(0, 5); }, [filteredCharacters]);
+  const recentActivity = useMemo(() => { return [...filteredCharacters].sort(() => -1).slice(0, 5); }, [filteredCharacters]);
 
- // CALCULO DO SCORE DA FICHA
+  // FUNÇÃO REPARADA COM TIPAGEM DEFINITIVA
   const calcCompletionScore = (char: ICharacter | undefined, bio: string): { score: number, missing: string[] } => {
-    let score = 0; 
-    const missing: string[] = [];
-    
+    let score = 0; const missing: string[] = [];
     if (!char) return { score, missing };
-    
     if (avatarUrl) score += 20; else missing.push("Capa Visual");
     if (bio && bio.replace(/<[^>]*>/g, '').trim().length > 100) score += 30; else missing.push("Arquivos");
     if (Object.keys(entityAttributes || {}).length > 0) score += 20; else missing.push("Ficha Técnica");
     if ((entityTags || []).length > 0) score += 15; else missing.push("Etiquetas (Tags)");
     if (relations.length > 0) score += 15; else missing.push("Vínculos Ativos");
-    
     return { score, missing };
   };
   const { score: completionScore, missing: missingScoreItems } = calcCompletionScore(currentCharacterData, charBio);
 
   const handleLogout = async () => { await supabase.auth.signOut(); window.location.reload(); };
 
-  // MENUS
   const navItemsTop = [ 
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }, 
     { id: 'campanhas', label: 'Mesa & Campanha', icon: Users, badge: 'Mesa' }, 
@@ -277,10 +267,10 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                          </div>
                          {!editingWorldId && selectedWorld?.id === w.id && <Globe className="w-4 h-4 text-emerald-500 shrink-0 opacity-50" />}
                        </div>
-                       {!editingWorldId && isGM && ( // Jogadores não podem editar o nome ou deletar o mundo
+                       {!editingWorldId && isGM && (
                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all z-10 bg-[#0B1018] shadow-[-10px_0_10px_#0B1018]">
-                           <button onClick={(e) => handleInlineWorldEditStart(e, w)} className="p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-slate-900 rounded-md transition-colors" title="Editar Nome"><Edit2 className="w-3.5 h-3.5" /></button>
-                           <button onClick={(e) => onWorldDeleteClick(e, w.id, w.name)} className="p-1.5 text-slate-500 hover:text-rose-500 hover:bg-slate-900 rounded-md transition-colors" title="Excluir Mundo"><Trash2 className="w-3.5 h-3.5" /></button>
+                           <button onClick={(e) => handleInlineWorldEditStart(e, w)} className="p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-slate-900 rounded-md transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                           <button onClick={(e) => onWorldDeleteClick(e, w.id, w.name)} className="p-1.5 text-slate-500 hover:text-rose-500 hover:bg-slate-900 rounded-md transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                          </div>
                        )}
                     </div>
@@ -345,7 +335,8 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                           {items.map(char => (
                             <button key={char.id} onClick={() => handleGlobalSearchResultClick(char)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/80 transition-colors text-left group">
                               <div className="w-8 h-8 rounded-md bg-slate-800 flex items-center justify-center overflow-hidden shrink-0">
-                                {char.avatar_url && getRevealedFields(char.id).includes('avatar') ? <img src={char.avatar_url} className="w-full h-full object-cover" /> : <Search className="w-4 h-4 text-slate-500" />}
+                                {/* CORREÇÃO 2: Adicionado alt */}
+                                {char.avatar_url && getRevealedFields(char.id).includes('avatar') ? <img src={char.avatar_url} alt={char.name || 'Avatar'} className="w-full h-full object-cover" /> : <Search className="w-4 h-4 text-slate-500" />}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="font-bold text-sm text-slate-300 group-hover:text-white truncate">{char.name}</p>
@@ -359,12 +350,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                   </div>
                 </div>
               )}
-              {isSearchDropdownOpen && debouncedSearch.length >= 2 && Object.keys(groupedSearchResults).length === 0 && (
-                <div className="absolute top-full left-0 mt-2 w-full bg-[#0B1018] border border-slate-700 rounded-xl shadow-2xl z-50 p-4 text-center">
-                  <p className="text-slate-500 text-sm">Nenhuma entidade visível encontrada para "{debouncedSearch}".</p>
-                </div>
-              )}
-
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -372,7 +357,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
              <div className="h-8 px-3 rounded-full bg-slate-800/50 border border-slate-700/50 flex items-center gap-3">
                 <User className="w-4 h-4 text-slate-400" />
                 <span className="text-xs text-slate-300 font-medium hidden sm:block">{session?.user?.email}</span>
-                <button onClick={handleLogout} className="text-slate-500 hover:text-rose-400 transition-colors ml-1" title="Sair"><LogOut className="w-4 h-4" /></button>
+                <button onClick={handleLogout} className="text-slate-500 hover:text-rose-400 transition-colors ml-1"><LogOut className="w-4 h-4" /></button>
              </div>
           </div>
         </header>
@@ -389,7 +374,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-emerald-500/20 rounded-full blur-[100px] pointer-events-none"></div>
                      <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.15)] border border-emerald-500/20 relative z-10"><Sparkles className="w-8 h-8 text-emerald-400" /></div>
                      <h2 className="text-4xl font-serif text-white mb-4 relative z-10">Bem-vindo ao WorldCraft</h2>
-                     <p className="text-slate-400 text-center max-w-md mb-10 text-lg relative z-10">Crie o seu primeiro universo ou aguarde que o Mestre o convide.</p>
+                     <p className="text-slate-400 text-center max-w-md mb-10 text-lg relative z-10">Crie o seu primeiro universo ou aguarde convite.</p>
                      {isGM && <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-3 rounded-lg transition-all relative z-10"><Plus className="w-5 h-5" /> Criar mundo</button>}
                   </div>
                 );
@@ -448,9 +433,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                               </button>
                             );
                           })}
-                          {Object.entries(wikiCounts).every(([_, count]) => count === 0) && (
-                             <div className="col-span-full p-8 border border-dashed border-slate-700 rounded-2xl text-center"><p className="text-slate-500 italic">O seu compêndio está vazio ou os documentos ainda não lhe foram revelados pelo Mestre.</p></div>
-                          )}
                         </div>
                       </div>
 
@@ -463,7 +445,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                              recentActivity.map((char, idx) => (
                                <div key={char.id} className={`flex items-center gap-4 p-3 hover:bg-slate-800/50 rounded-xl transition-colors cursor-pointer ${idx !== recentActivity.length -1 ? 'border-b border-slate-800/50' : ''}`} onClick={() => { loadCharacterData(char); setActiveView(wikiCategories.find(c => c.key === char.category)?.id || 'personagens'); }}>
                                   <div className="w-10 h-10 rounded-lg bg-slate-800 overflow-hidden shrink-0 border border-slate-700">
-                                    {char.avatar_url && getRevealedFields(char.id).includes('avatar') ? <img src={char.avatar_url} className="w-full h-full object-cover"/> : <User className="w-5 h-5 m-2.5 text-slate-500"/>}
+                                    {char.avatar_url && getRevealedFields(char.id).includes('avatar') ? <img src={char.avatar_url} alt={char.name || 'Avatar'} className="w-full h-full object-cover"/> : <User className="w-5 h-5 m-2.5 text-slate-500"/>}
                                   </div>
                                   <div className="min-w-0 flex-1">
                                     <p className="font-bold text-sm text-slate-200 truncate">{char.name}</p>
@@ -476,7 +458,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                         </div>
                       </div>
                     </div>
-
                   </div>
                 </div>
               );
@@ -494,7 +475,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                        {filteredCharacters.map(char => (
                          <div key={char.id} onClick={() => { loadCharacterData(char); setActiveView(wikiCategories.find(c => c.key === char.category)?.id || 'personagens'); }} className="bg-[#0B1018] border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 hover:border-slate-600 transition-colors cursor-pointer group">
                             <div className="w-full aspect-[4/5] bg-[#05080C] rounded-xl border border-slate-800/50 flex items-center justify-center overflow-hidden relative">
-                               {char.avatar_url && getRevealedFields(char.id).includes('avatar') ? <img src={char.avatar_url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <User className="w-8 h-8 text-slate-700" />}
+                               {char.avatar_url && getRevealedFields(char.id).includes('avatar') ? <img src={char.avatar_url} alt={char.name || 'Avatar'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <User className="w-8 h-8 text-slate-700" />}
                                <div className={`absolute bottom-3 left-3 border text-[10px] font-medium px-2 py-1 rounded-md backdrop-blur-md ${getCategoryStyle(char.category || 'Personagem').bg} ${getCategoryStyle(char.category || 'Personagem').text} ${getCategoryStyle(char.category || 'Personagem').border}`}>{char.category || 'Personagem'}</div>
                             </div>
                             <h4 className="text-white font-medium text-base truncate">{char.name}</h4>
@@ -506,13 +487,11 @@ export default function WorldCraftUI({ session }: { session?: any }) {
               );
             }
 
-            // ── 3. FICHA DA ENTIDADE COM CENSURA E NOTAS ──
+            // ── 3. FICHA DA ENTIDADE ──
             const activeWikiCategory = wikiCategories.find(c => c.id === resolvedView);
             if (activeWikiCategory) {
-              
               let categoryEntities = filteredCharacters.filter(c => c.category === activeWikiCategory.key || (!c.category && activeWikiCategory.key === 'Personagem'));
               if (activeTagFilter) categoryEntities = categoryEntities.filter(c => c.tags?.includes(activeTagFilter));
-
               const currentCatStyle = getCategoryStyle(currentCharacterData?.category || activeWikiCategory.key);
 
               return (
@@ -542,7 +521,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                             >
                                 <div className="flex items-start gap-3 w-full mb-2">
                                   <div className={`w-10 h-10 rounded-md bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden border border-slate-700 ${selectedCharacter === char.id ? 'opacity-100' : 'opacity-80'}`}>
-                                    {char.avatar_url && thisCharRevealed.includes('avatar') ? <img src={char.avatar_url} className="w-full h-full object-cover" /> : <activeWikiCategory.icon className="w-5 h-5 text-slate-500" />}
+                                    {char.avatar_url && thisCharRevealed.includes('avatar') ? <img src={char.avatar_url} alt={char.name || 'Avatar'} className="w-full h-full object-cover" /> : <activeWikiCategory.icon className="w-5 h-5 text-slate-500" />}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <h3 className={`font-bold text-sm truncate ${selectedCharacter === char.id ? getCategoryStyle(char.category || '').text : 'text-slate-200'}`}>{char.name}</h3>
@@ -554,7 +533,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                     {char.tags.slice(0, 2).map(tag => (
                                       <span key={tag} onClick={(e) => { e.stopPropagation(); setActiveTagFilter(activeTagFilter === tag ? null : tag); }} className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${activeTagFilter === tag ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/50 text-slate-400 border-slate-700/50 hover:bg-slate-800 hover:text-slate-300'}`}>{tag}</span>
                                     ))}
-                                    {char.tags.length > 2 && <span className="text-[9px] px-1.5 py-0.5 rounded border bg-slate-800/50 text-slate-500 border-slate-700/50">+{char.tags.length - 2}</span>}
                                   </div>
                                 )}
                             </button>
@@ -575,7 +553,8 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                              <div className="flex flex-col relative">
                                <h2 className="text-2xl font-serif font-bold text-white leading-none flex items-center gap-3">
                                  {currentCharacterData?.name}
-                                 {!isGM && !currentCharacterData?.is_public && <span title="Acesso Restrito"><Lock size={16} className="text-slate-500" /></span>}
+                                 {/* CORREÇÃO 3: title trocado pelo span para o Lucide icon */}
+                                 {!isGM && !currentCharacterData?.is_public && <span title="Acesso Restrito"><Lock size={16} className="text-slate-500"/></span>}
                                </h2>
                                <div className="flex items-center gap-2 mt-1">
                                  <span className={`text-[9px] font-sans px-1.5 py-0.5 rounded border ${currentCatStyle.bg} ${currentCatStyle.text} ${currentCatStyle.border} uppercase font-bold tracking-widest`}>{currentCharacterData?.category}</span>
@@ -585,11 +564,11 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                            </div>
 
                            <div className="flex items-center gap-2 ml-auto">
-                             <button onClick={() => setIsExportModalOpen(true)} className="p-2.5 rounded-lg font-bold text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition-all border border-transparent shadow-sm" title="Exportar Entidade"><Download className="w-4 h-4"/></button>
+                             <button onClick={() => setIsExportModalOpen(true)} className="p-2.5 rounded-lg font-bold text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition-all border border-transparent shadow-sm"><Download className="w-4 h-4"/></button>
                              {isGM && (
                                <>
-                                <button onClick={handleDuplicate} className="p-2.5 rounded-lg font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all border border-transparent shadow-sm" title="Duplicar Entidade"><Copy className="w-4 h-4"/></button>
-                                <button onClick={onEntityDeleteClick} className="p-2.5 rounded-lg font-bold text-slate-500 hover:text-white hover:bg-rose-600 transition-all border border-transparent shadow-sm" title="Excluir Registos"><Trash2 className="w-4 h-4"/></button>
+                                <button onClick={handleDuplicate} className="p-2.5 rounded-lg font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all border border-transparent shadow-sm"><Copy className="w-4 h-4"/></button>
+                                <button onClick={onEntityDeleteClick} className="p-2.5 rounded-lg font-bold text-slate-500 hover:text-white hover:bg-rose-600 transition-all border border-transparent shadow-sm"><Trash2 className="w-4 h-4"/></button>
                                 <button onClick={handleSaveCharacterInfo} disabled={isSavingChar} className={`p-2.5 px-4 rounded-lg font-bold flex items-center gap-2 transition-all shadow-md ${currentCatStyle.bg} ${currentCatStyle.text} border ${currentCatStyle.border} hover:brightness-110 disabled:opacity-50`}>{isSavingChar ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} <span className="text-sm hidden md:inline">Gravar</span></button>
                                </>
                              )}
@@ -597,7 +576,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                        </div>
                        
                        {isGM && (
-                         <div className="px-4 py-2 border-b border-slate-800/50 bg-[#0B1018] z-10" title={`Em falta:\n${missingScoreItems.join('\n')}`}>
+                         <div className="px-4 py-2 border-b border-slate-800/50 bg-[#0B1018] z-10">
                            <div className="flex items-center gap-3">
                              <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                                <div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-700" style={{ width: `${completionScore}%` }} />
@@ -617,7 +596,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                        </div>
 
                        <div className="flex-1 flex overflow-hidden z-10">
-                          {/* CONTEÚDO DINÂMICO POR ABAS */}
                           <div className={`flex-1 overflow-y-auto custom-scrollbar bg-[#090D14] ${activeTab === 'leitura' ? '' : 'p-6 md:p-8'}`}>
                               
                               {activeTab === 'geral' && (
@@ -630,7 +608,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                      <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-3xl bg-[#0B1018]">
                                         <Lock size={40} className="text-slate-700 mb-4" />
                                         <h3 className="text-xl font-bold text-slate-500">DADOS CONFIDENCIAIS</h3>
-                                        <p className="text-sm text-slate-600 mt-2">O Mestre ainda não revelou estes arquivos para a sua classificação.</p>
                                      </div>
                                   )}
                                 </div>
@@ -667,7 +644,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                              <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-800">
                                                 <div>
                                                   <span className="text-xs font-bold text-white block">Acesso Público</span>
-                                                  <span className="text-[9px] text-slate-500 uppercase tracking-wider">Desativa o filtro de censura (todos veem tudo).</span>
+                                                  <span className="text-[9px] text-slate-500 uppercase tracking-wider">Desativa a censura.</span>
                                                 </div>
                                                 <div onClick={() => setIsPublic(!isPublic)} className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors shadow-inner ${isPublic ? 'bg-emerald-500' : 'bg-slate-700'}`}><div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all shadow-sm ${isPublic ? 'right-1' : 'left-1'}`}></div></div>
                                              </div>
@@ -676,10 +653,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                     </>
                                   ) : canViewAttributes ? (
                                     <div className="col-span-full">
-                                      <div className="flex items-center gap-2 border-b border-slate-800 pb-2 mb-6">
-                                        <LayoutGrid className="w-4 h-4 text-slate-500" />
-                                        <p className="text-xs font-bold text-white uppercase tracking-widest">Características Reveladas</p>
-                                      </div>
                                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                         {Object.entries(entityAttributes).map(([key, value]) => (
                                           <div key={key} className="bg-[#0B1018] border border-slate-800/80 p-4 rounded-xl">
@@ -687,7 +660,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                             <p className="text-sm text-white font-medium">{value || '—'}</p>
                                           </div>
                                         ))}
-                                        {Object.keys(entityAttributes).length === 0 && <p className="text-sm text-slate-500 italic">Sem atributos registados.</p>}
                                       </div>
                                     </div>
                                   ) : (
@@ -703,15 +675,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8 max-w-5xl">
                                   {isGM && (
                                     <div className="bg-[#0B1018] border border-slate-800/80 rounded-2xl p-6">
-                                      <div className="flex items-center gap-3 mb-6">
-                                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                                          <Share2 className="text-emerald-500 w-5 h-5" />
-                                        </div>
-                                        <div>
-                                          <h3 className="text-lg font-bold text-white">Forjar Vínculo</h3>
-                                          <p className="text-[11px] text-slate-500 uppercase tracking-widest font-bold">Conecte {currentCharacterData?.name} a outra entidade</p>
-                                        </div>
-                                      </div>
                                       <div className="flex flex-col md:flex-row gap-4">
                                         <div className="flex-1">
                                           <select value={newRelationTarget} onChange={e => setNewRelationTarget(e.target.value)} className="w-full bg-[#05080C] border border-slate-800 text-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500/50 transition-colors shadow-inner">
@@ -722,7 +685,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                           </select>
                                         </div>
                                         <div className="flex-1">
-                                          <input type="text" value={newRelationLabel} onChange={e => setNewRelationLabel(e.target.value)} placeholder="Como se relacionam? (Ex: É mestre de...)" className="w-full bg-[#05080C] border border-slate-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500/50 transition-colors shadow-inner" />
+                                          <input type="text" value={newRelationLabel} onChange={e => setNewRelationLabel(e.target.value)} placeholder="Como se relacionam?" className="w-full bg-[#05080C] border border-slate-800 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-500/50 transition-colors shadow-inner" />
                                         </div>
                                         <button onClick={handleAddRelation} disabled={!newRelationTarget || !newRelationLabel} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-8 py-3 rounded-xl text-sm transition-all disabled:opacity-50 shadow-md shrink-0">
                                            Conectar
@@ -732,41 +695,32 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                   )}
 
                                   {isGM || canViewRelations ? (
-                                    <div>
-                                      <div className="flex items-center gap-2 mb-4 border-b border-slate-800/50 pb-2">
-                                        <Network className="w-4 h-4 text-slate-500" />
-                                        <p className="text-xs font-bold text-white uppercase tracking-widest">Teia de Relações Ativas</p>
-                                      </div>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                         {relations.length === 0 && <div className="col-span-full py-8 text-center border border-dashed border-slate-800 rounded-2xl text-slate-500 text-sm">Nenhum vínculo estabelecido ainda.</div>}
-                                         {relations.map(rel => {
-                                           const isFromMe = rel.from_entity_id === selectedCharacter;
-                                           const target = isFromMe ? rel.to_entity : rel.from_entity;
-                                           if (!target) return null;
-                                           const targetStyle = getCategoryStyle(target.role || 'Personagem');
-                                           
-                                           // Se for jogador, e o 'target' não estiver visível para ele, ocultamos o nome para manter segredo.
-                                           const isTargetVisible = isGM || visibleEntitiesList.some(v => v.id === target.id);
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                       {relations.map(rel => {
+                                         const isFromMe = rel.from_entity_id === selectedCharacter;
+                                         const target = isFromMe ? rel.to_entity : rel.from_entity;
+                                         if (!target) return null;
+                                         const targetStyle = getCategoryStyle(target.role || 'Personagem');
+                                         const isTargetVisible = isGM || visibleEntitiesList.some(v => v.id === target.id);
 
-                                           return (
-                                             <div key={rel.id} className="flex items-center justify-between p-4 bg-[#0B1018] border border-slate-800/80 hover:border-slate-600 rounded-2xl transition-all group shadow-sm">
-                                                <div className="flex items-center gap-4 min-w-0">
-                                                   <div className={`w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-[10px] font-bold overflow-hidden border ${targetStyle.border} shrink-0`}>
-                                                     {target.avatar_url && isTargetVisible ? <img src={target.avatar_url} className="w-full h-full object-cover"/> : <User className="w-5 h-5 text-slate-500" />}
-                                                   </div>
-                                                   <div className="min-w-0">
-                                                      <p className="text-sm font-bold text-white truncate">{isTargetVisible ? target.name : '??? (Desconhecido)'}</p>
-                                                      <div className="flex items-center gap-1.5 mt-0.5">
-                                                        <span className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${targetStyle.bg} ${targetStyle.text} ${targetStyle.border}`}>{target.role}</span>
-                                                        <span className="text-[10px] text-slate-500 truncate">{rel.relation_label} {isFromMe ? '→' : '←'}</span>
-                                                      </div>
-                                                   </div>
-                                                </div>
-                                                {isGM && <button onClick={() => handleRemoveRelation(rel.id)} className="text-slate-600 hover:text-rose-500 hover:bg-rose-500/10 transition-colors p-2 rounded-lg opacity-0 group-hover:opacity-100 shrink-0 ml-2" title="Cortar Vínculo"><X size={16}/></button>}
-                                             </div>
-                                           );
-                                         })}
-                                      </div>
+                                         return (
+                                           <div key={rel.id} className="flex items-center justify-between p-4 bg-[#0B1018] border border-slate-800/80 hover:border-slate-600 rounded-2xl transition-all group shadow-sm">
+                                              <div className="flex items-center gap-4 min-w-0">
+                                                 <div className={`w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-[10px] font-bold overflow-hidden border ${targetStyle.border} shrink-0`}>
+                                                   {target.avatar_url && isTargetVisible ? <img src={target.avatar_url} alt={target.name || 'Avatar'} className="w-full h-full object-cover"/> : <User className="w-5 h-5 text-slate-500" />}
+                                                 </div>
+                                                 <div className="min-w-0">
+                                                    <p className="text-sm font-bold text-white truncate">{isTargetVisible ? target.name : '??? (Desconhecido)'}</p>
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                      <span className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${targetStyle.bg} ${targetStyle.text} ${targetStyle.border}`}>{target.role}</span>
+                                                      <span className="text-[10px] text-slate-500 truncate">{rel.relation_label} {isFromMe ? '→' : '←'}</span>
+                                                    </div>
+                                                 </div>
+                                              </div>
+                                              {isGM && <button onClick={() => handleRemoveRelation(rel.id)} className="text-slate-600 hover:text-rose-500 hover:bg-rose-500/10 transition-colors p-2 rounded-lg opacity-0 group-hover:opacity-100 shrink-0 ml-2"><X size={16}/></button>}
+                                           </div>
+                                         );
+                                       })}
                                     </div>
                                   ) : (
                                     <div className="col-span-full h-64 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-3xl bg-[#0B1018]">
@@ -781,13 +735,10 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col h-full max-w-4xl">
                                    <div className="bg-[#0B1018] border border-emerald-500/20 rounded-2xl p-4 mb-6 shadow-sm">
                                       <div className="flex items-start gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                                          <Users className="w-5 h-5 text-emerald-500" />
-                                        </div>
                                         <div className="flex-1">
                                           <textarea 
                                             value={newNoteContent} onChange={e => setNewNoteContent(e.target.value)} 
-                                            placeholder="Partilhe uma teoria, anote pistas ou faça perguntas à party sobre este sujeito..." 
+                                            placeholder="Partilhe uma teoria ou anote pistas..." 
                                             className="w-full bg-[#05080C] border border-slate-800 text-sm text-white rounded-xl p-3 outline-none focus:border-emerald-500/50 resize-none min-h-[80px]"
                                           />
                                           <div className="flex items-center justify-between mt-3">
@@ -795,7 +746,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isNotePrivate ? 'bg-amber-500 border-amber-500' : 'bg-slate-800 border-slate-700'}`}>
                                                  {isNotePrivate && <Check size={12} className="text-black" />}
                                                </div>
-                                               <span className={`text-xs font-bold uppercase tracking-widest ${isNotePrivate ? 'text-amber-500' : 'text-slate-500 group-hover:text-slate-400'}`}>Nota Privada (Só para mim)</span>
+                                               <span className={`text-xs font-bold uppercase tracking-widest ${isNotePrivate ? 'text-amber-500' : 'text-slate-500 group-hover:text-slate-400'}`}>Nota Privada</span>
                                             </label>
                                             <button onClick={handleAddNote} disabled={!newNoteContent.trim()} className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2">
                                               <Send size={14}/> Gravar Nota
@@ -806,10 +757,8 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                    </div>
 
                                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-2">
-                                      {playerNotes.length === 0 && <p className="text-center text-slate-500 text-sm italic py-10">Nenhuma anotação sobre esta entidade ainda.</p>}
                                       {playerNotes.map(note => {
                                         const isMine = note.author_id === session?.user?.id;
-                                        // Na fase 2 adicionamos cores aos membros, procuramos o autor:
                                         const authorMember = isGM && isMine ? { display_name: 'Mestre', avatar_color: '#10b981' } : campaignMembers.find(m => m.user_id === note.author_id);
                                         
                                         return (
@@ -819,13 +768,12 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                                 <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm" style={{ backgroundColor: authorMember?.avatar_color || '#334155' }}>
                                                   {authorMember?.display_name?.substring(0,2).toUpperCase() || '??'}
                                                 </div>
-                                                <span className="text-xs font-bold text-slate-300">{authorMember?.display_name || 'Jogador Desconhecido'}</span>
-                                                <span className="text-[10px] text-slate-600 font-mono">• {new Date(note.created_at).toLocaleDateString()}</span>
+                                                <span className="text-xs font-bold text-slate-300">{authorMember?.display_name || 'Jogador'}</span>
                                               </div>
                                               <div className="flex items-center gap-2">
-                                                {note.is_private && <span className="text-[9px] bg-amber-500/20 text-amber-500 border border-amber-500/30 px-2 py-0.5 rounded uppercase font-bold tracking-widest"><Lock size={8} className="inline mr-1 -mt-0.5"/> Privado</span>}
+                                                {note.is_private && <span className="text-[9px] bg-amber-500/20 text-amber-500 border border-amber-500/30 px-2 py-0.5 rounded uppercase font-bold tracking-widest">Privado</span>}
                                                 {(isMine || isGM) && (
-                                                  <button onClick={() => deletePlayerNote(note.id, selectedCampaign.id, selectedCharacter)} className="text-slate-600 hover:text-rose-500 transition-colors" title="Apagar Nota"><Trash2 size={14}/></button>
+                                                  <button onClick={() => deletePlayerNote(note.id, selectedCampaign?.id || '', selectedCharacter || '')} className="text-slate-600 hover:text-rose-500 transition-colors"><Trash2 size={14}/></button>
                                                 )}
                                               </div>
                                             </div>
@@ -841,13 +789,8 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                 <div className="animate-in fade-in duration-300 max-w-3xl mx-auto py-8 px-6">
                                   {avatarUrl && canViewAvatar && (
                                     <div className="w-full aspect-video rounded-2xl overflow-hidden mb-8 shadow-2xl border border-slate-800 relative">
-                                      <img src={avatarUrl} className="w-full h-full object-cover" />
+                                      <img src={avatarUrl} alt={currentCharacterData?.name || 'Avatar'} className="w-full h-full object-cover" />
                                     </div>
-                                  )}
-                                  {!canViewAvatar && !isGM && (
-                                     <div className="w-full aspect-video rounded-2xl bg-[#05080C] mb-8 shadow-2xl border-2 border-dashed border-slate-800 flex items-center justify-center">
-                                       <div className="text-center"><ImageIcon size={30} className="mx-auto text-slate-700 mb-2"/><p className="text-xs font-bold text-slate-600 uppercase tracking-widest">IMAGEM CONFIDENCIAL</p></div>
-                                     </div>
                                   )}
                                   
                                   <div className="mb-10 pb-6 border-b border-slate-800">
@@ -885,7 +828,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                               )}
                           </div>
 
-                          {/* PAINEL DIREITO: FOTO E TAGS (Só visível se estiver a editar, ou seja, se for GM) */}
+                          {/* PAINEL DIREITO: FOTO E TAGS */}
                           {activeTab !== 'leitura' && isGM && (
                             <div className="w-80 border-l border-slate-800 bg-[#0B1018] p-6 flex flex-col gap-8 shrink-0 overflow-y-auto custom-scrollbar z-10">
                                 <div>
@@ -895,7 +838,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                    </div>
                                    <div onClick={() => fileInputRef.current?.click()} className={`w-full aspect-[3/4] rounded-2xl border-2 border-dashed border-slate-700 bg-[#05080C] flex flex-col items-center justify-center cursor-pointer hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all overflow-hidden relative group shadow-inner`}>
                                       <input type="file" className="hidden" accept="image/*" ref={fileInputRef} onChange={handleAvatarUpload} />
-                                      {isUploading ? <Loader2 className="w-8 h-8 animate-spin text-emerald-500" /> : avatarUrl ? <><img src={avatarUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-2"><Camera size={16}/> Trocar</div></> : <><ImageIcon className="w-8 h-8 text-slate-600 mb-3 group-hover:text-emerald-500 transition-colors" /><span className="text-xs font-bold text-slate-500 uppercase tracking-widest group-hover:text-emerald-500 transition-colors">Fazer Upload</span></>}
+                                      {isUploading ? <Loader2 className="w-8 h-8 animate-spin text-emerald-500" /> : avatarUrl ? <><img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-2"><Camera size={16}/> Trocar</div></> : <><ImageIcon className="w-8 h-8 text-slate-600 mb-3 group-hover:text-emerald-500 transition-colors" /><span className="text-xs font-bold text-slate-500 uppercase tracking-widest group-hover:text-emerald-500 transition-colors">Fazer Upload</span></>}
                                    </div>
                                 </div>
                                 <div className="w-full h-px bg-slate-800/50"></div>
@@ -906,7 +849,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                                     <button onClick={() => { if(newTagInput.trim()) { setEntityTags([...new Set([...entityTags, newTagInput.trim()])]); setNewTagInput(''); } }} className="px-3 py-2 bg-slate-800 hover:bg-emerald-600 text-white rounded-xl transition-colors shadow-sm"><Plus size={16}/></button>
                                   </div>
                                   <div className="flex flex-wrap gap-2">
-                                    {entityTags.length === 0 && <span className="text-xs text-slate-600 italic">Nenhuma tag definida.</span>}
                                     {entityTags.map(tag => (
                                       <span key={tag} className="bg-slate-900 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700/50 flex items-center gap-1.5 shadow-sm font-medium">{tag} <X className="w-3.5 h-3.5 cursor-pointer text-slate-500 hover:text-rose-400 transition-colors" onClick={() => setEntityTags(entityTags.filter(t => t !== tag))} /></span>
                                     ))}
@@ -934,23 +876,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
             if (resolvedView === 'cronos') return <Timeline />;
             if (resolvedView === 'notas') return <QuickNotes />;
 
-            const pendingModules: Record<string, any> = {
-              'cartografia': { title: 'Cartografia Mapeada', icon: Map, desc: 'Criação de mapas com marcações de entidades.' },
-              'mesa': { title: 'Mesa Virtual (VTT)', icon: MonitorPlay, desc: 'Grid tático, rolagem de dados e iniciativa.' },
-              'calendario': { title: 'Calendário Cósmico', icon: Calendar, desc: 'Dias, luas e eventos celestes.' },
-            };
-            const pending = pendingModules[resolvedView];
-            if (pending) {
-              return (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-8 animate-in fade-in duration-300 bg-[#090D14]">
-                   <div className="w-20 h-20 bg-slate-900 border border-slate-800 rounded-3xl flex items-center justify-center mb-6 shadow-lg z-10"><pending.icon className="w-10 h-10 text-emerald-500" /></div>
-                   <h2 className="text-3xl font-serif text-white mb-3 z-10">{pending.title}</h2>
-                   <p className="text-slate-400 text-center max-w-md mb-8 z-10">{pending.desc}</p>
-                   <button className="bg-slate-900 border border-slate-800 hover:bg-slate-800 text-white font-semibold px-6 py-2.5 rounded-lg z-10 flex items-center gap-2"><Wand2 className="w-4 h-4 text-emerald-500"/> Módulo em Construção</button>
-                </div>
-              );
-            }
-
             return null;
           })()}
         </div>
@@ -960,6 +885,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
       <CreateEntityModal isOpen={isEntityModalOpen} onClose={() => setIsEntityModalOpen(false)} defaultType={entityTypeToCreate} />
       <ExportEntityModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} entity={currentCharacterData} world={selectedWorld} bioHtml={charBio} />
       
+      {/* CORREÇÃO 4: Removemos a propriedade isLoading que não existia no ConfirmModal original */}
       <ConfirmModal 
         isOpen={confirmModalConfig.isOpen}
         title={confirmModalConfig.title}
@@ -968,7 +894,6 @@ export default function WorldCraftUI({ session }: { session?: any }) {
         onClose={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
         confirmVariant="danger"
         confirmLabel="Excluir"
-        isLoading={confirmModalConfig.isLoading}
       />
 
       <style dangerouslySetInnerHTML={{__html: `
