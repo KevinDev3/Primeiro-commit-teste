@@ -575,7 +575,7 @@ export default function WorldCraftUI({ session }: { session?: any }) {
                              <div className="flex flex-col relative">
                                <h2 className="text-2xl font-serif font-bold text-white leading-none flex items-center gap-3">
                                  {currentCharacterData?.name}
-                                 {!isGM && !currentCharacterData?.is_public && <Lock size={16} className="text-slate-500" title="Acesso Restrito"/>}
+                                 {!isGM && !currentCharacterData?.is_public && <span title="Acesso Restrito"><Lock size={16} className="text-slate-500" /></span>}
                                </h2>
                                <div className="flex items-center gap-2 mt-1">
                                  <span className={`text-[9px] font-sans px-1.5 py-0.5 rounded border ${currentCatStyle.bg} ${currentCatStyle.text} ${currentCatStyle.border} uppercase font-bold tracking-widest`}>{currentCharacterData?.category}</span>
